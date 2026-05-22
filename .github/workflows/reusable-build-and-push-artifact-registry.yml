@@ -1,0 +1,90 @@
+name: Build and Push to Artifact Registry
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: Path to build context
+        required: true
+        type: string
+        default: "."
+      dockerfile:
+        description: Path to Dockerfile
+        required: true
+        type: string
+        default: "Dockerfile"
+      image-repo:
+        description: Repo for the docker image
+        required: true
+        type: string
+      image-tag:
+        description: Tag for the docker image
+        required: true
+        type: string
+      build-args:
+        description: Build arguments to pass to docker build
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER:
+        description: Workload Identity Provider used to impersonate service account
+        required: true
+      GCP_SERVICE_ACCOUNT:
+        description: Service Account to impersonate
+        required: true
+    outputs:
+      image-tag:
+        description: Full image tag of result image
+        value: ${{ jobs.build-push.outputs.image-tag }}
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: "${{ inputs.image-repo }}:${{ inputs.image-tag }}"
+
+    permissions:
+      contents: read
+      # required by google-github-actions/auth
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v4
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Build and Push to Artifact Registry
+        uses: docker/build-push-action@v7
+        with:
+          push: true
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          build-args: ${{ inputs.build-args }}
+          tags: "${{ inputs.image-repo }}:${{ inputs.image-tag }}"
+          cache-from: type=registry,ref=${{ inputs.image-repo }}:buildcache
+          cache-to: type=registry,ref=${{ inputs.image-repo }}:buildcache,mode=max
+
+      - name: Check vulnerabilities
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: "${{ inputs.image-repo }}:${{ inputs.image-tag }}"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"

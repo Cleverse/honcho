@@ -1,0 +1,51 @@
+# Build and push Honcho image for aerogram GKE (GitOps image pin is manual in safefi-gitops).
+# Triggers: git tag v* or workflow_dispatch with version input.
+name: Build & Release Honcho Image (Aerogram)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag (e.g. v3.0.8)'
+        required: true
+  push:
+    tags:
+      - 'v*'
+
+env:
+  IMAGE_REPO: us-central1-docker.pkg.dev/safefi/aerogram/honcho
+  DOCKER_FILE: Dockerfile
+
+jobs:
+  prepare:
+    name: Prepare Environment
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      IMAGE_REPO: ${{ env.IMAGE_REPO }}
+      DOCKER_FILE: ${{ env.DOCKER_FILE }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get tag value
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "Working tag: $TAG"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+  build-push:
+    name: Build Docker & Push Image to Artifact Registry
+    needs:
+      - prepare
+    if: ${{ needs.prepare.outputs.tag != '' }}
+    uses: ./.github/workflows/reusable-build-and-push-artifact-registry.yml
+    with:
+      context: ./
+      dockerfile: ${{ needs.prepare.outputs.DOCKER_FILE }}
+      image-repo: ${{ needs.prepare.outputs.IMAGE_REPO }}
+      image-tag: ${{ needs.prepare.outputs.tag }}
+    secrets: inherit
