@@ -34,9 +34,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 ENV PATH="/app/.venv/bin:$PATH"
 ENV HOME=/app
 ENV UV_CACHE_DIR=/tmp/uv-cache
+ENV TIKTOKEN_CACHE_DIR=/app/.cache/tiktoken
+
+# Pre-download tiktoken encodings (read-only root FS at runtime)
+RUN mkdir -p "$TIKTOKEN_CACHE_DIR" && \
+    /app/.venv/bin/python -c "\
+import tiktoken; \
+tiktoken.get_encoding('o200k_base'); \
+tiktoken.get_encoding('cl100k_base'); \
+"
 
 # Create non-root user and set ownership
-RUN addgroup --system app && adduser --system --group app && mkdir -p /tmp/uv-cache && chown -R app:app /app /tmp/uv-cache
+RUN addgroup --system app && adduser --system --group app && mkdir -p /tmp/uv-cache && chown -R app:app /app /tmp/uv-cache /app/.cache
 
 COPY --chown=app:app src/ /app/src/
 COPY --chown=app:app migrations/ /app/migrations/
