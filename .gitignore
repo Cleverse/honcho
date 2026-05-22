@@ -6,6 +6,7 @@ api/docker-compose.yml
 *.db
 data
 redis-data
+honcho-migration-checkpoint/
 docker-compose.yml
 compose.yml
 
