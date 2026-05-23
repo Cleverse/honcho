@@ -268,11 +268,65 @@ curl -s -X POST http://localhost:8000/v3/workspaces \
 
 If you get back a workspace object with an `id`, your database is connected and migrations ran correctly.
 
-### 3. API Documentation
+### 3. Automated smoke test (full stack)
+
+Smoke tests are split into stage scripts under `scripts/smoke/`. They share workspace/peer/session IDs via a state file (default: `.honcho-smoke-state.json`).
+
+| Stage script | What it checks |
+|--------------|----------------|
+| `scripts/smoke/test_health.py` | API liveness (`GET /health`) |
+| `scripts/smoke/test_workspace.py` | DB + migrations (create workspace) |
+| `scripts/smoke/test_peer.py` | Create peer |
+| `scripts/smoke/test_session.py` | Create session |
+| `scripts/smoke/test_messages.py` | Post messages (enqueues deriver) |
+| `scripts/smoke/test_queue.py` | Deriver queue drains |
+| `scripts/smoke/test_dialectic.py` | Dialectic chat (needs LLM keys) |
+| `scripts/smoke/test_cleanup.py` | Delete smoke workspace |
+
+**Run all stages** (orchestrator, in-process):
+
+```bash
+uv run python scripts/test_honcho_service.py --base-url http://localhost:8000
+```
+
+**Run all stages as separate subprocesses** (one script per stage):
+
+```bash
+uv run python scripts/test_honcho_service.py --subprocess
+```
+
+**Run individual stages** (from the repo root; after earlier stages have written the state file):
+
+```bash
+uv run python -m scripts.smoke.test_health
+uv run python -m scripts.smoke.test_workspace
+uv run python -m scripts.smoke.test_peer
+# ... test_session, test_messages, test_queue, test_dialectic, test_cleanup
+```
+
+You can also run the `.py` files directly (`uv run python scripts/smoke/test_health.py`); they add the repo root to `sys.path` automatically.
+
+**Prerequisites:** API and deriver must be running. Dialectic requires LLM provider keys on the server. Use `--skip-chat` on the orchestrator to skip `test_dialectic`. When `AUTH_USE_AUTH=true`, set `HONCHO_API_KEY` or `AUTH_JWT_SECRET`.
+
+```bash
+# DB + deriver only (no LLM)
+uv run python scripts/test_honcho_service.py --skip-chat
+
+# Selected stages only
+uv run python scripts/test_honcho_service.py --stages health,workspace,queue
+
+# Auth-enabled deployment
+AUTH_JWT_SECRET=... uv run python scripts/test_honcho_service.py
+
+# CI-friendly JSON output
+uv run python scripts/test_honcho_service.py --skip-chat --json
+```
+
+### 4. API Documentation
 
 Visit `http://localhost:8000/docs` to see the interactive API documentation.
 
-### 4. Test with SDK
+### 5. Test with SDK
 
 ```python
 from honcho import Honcho

@@ -1,0 +1,8 @@
+{
+  "base_url": "http://localhost:7999",
+  "workspace_id": "aerogram-memory-prod",
+  "peer_id": "smoke-peer-aergor-test-workspace",
+  "session_id": "aergor-test-session",
+  "created_workspace": true,
+  "smoke_suffix": "aergor-test-workspace"
+}
